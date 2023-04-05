@@ -768,6 +768,7 @@ impl AuthorityState {
                 &epoch_store,
             )
             .await?;
+        println!("@@@@@@@@@@@@@@ effects: {:?}", effects);
         self.sign_effects(effects, &epoch_store)
     }
 
@@ -1217,6 +1218,12 @@ impl AuthorityState {
             execution_result,
             &module_cache,
         )
+    }
+
+    // Only used for testing because of how epoch store is loaded.
+    pub fn reference_gas_price_for_testing(&self) -> Result<u64, anyhow::Error> {
+        let epoch_store = self.epoch_store_for_testing();
+        Ok(epoch_store.reference_gas_price())
     }
 
     pub fn is_tx_already_executed(&self, digest: &TransactionDigest) -> SuiResult<bool> {

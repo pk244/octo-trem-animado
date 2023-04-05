@@ -761,6 +761,7 @@ pub fn convert_vm_error<S: MoveResolver<Err = SuiError>>(
     vm: &MoveVM,
     state_view: &S,
 ) -> ExecutionError {
+    println!("convert_vm_error: {:?}", error);
     let kind = match (error.major_status(), error.sub_status(), error.location()) {
         (StatusCode::EXECUTED, _, _) => {
             // If we have an error the status probably shouldn't ever be Executed
