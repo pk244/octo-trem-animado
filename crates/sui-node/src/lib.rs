@@ -904,6 +904,18 @@ impl SuiNode {
                 .state
                 .get_sui_system_state_object_during_reconfig()
                 .expect("Read Sui System State object cannot fail");
+
+            // Note that we assert on safe_mode (for testing) before sending system state
+            // over to the end_of_epoch_channel such that updating `sim_safe_mode_expected`
+            // after seeing the message from `end_of_epoch_channel` won't cause a race.
+            #[cfg(msim)]
+            if !self.sim_safe_mode_expected.load(Ordering::Relaxed) {
+                debug_assert!(!latest_system_state.safe_mode());
+            }
+
+            #[cfg(not(msim))]
+            debug_assert!(!latest_system_state.safe_mode());
+
             if let Err(err) = self.end_of_epoch_channel.send(latest_system_state.clone()) {
                 if self.state.is_fullnode(&cur_epoch_store) {
                     warn!(
@@ -918,14 +930,6 @@ impl SuiNode {
             let next_epoch_committee = new_epoch_start_state.get_sui_committee();
             let next_epoch = next_epoch_committee.epoch();
             assert_eq!(cur_epoch_store.epoch() + 1, next_epoch);
-
-            #[cfg(msim)]
-            if !self.sim_safe_mode_expected.load(Ordering::Relaxed) {
-                debug_assert!(!new_epoch_start_state.safe_mode());
-            }
-
-            #[cfg(not(msim))]
-            debug_assert!(!new_epoch_start_state.safe_mode());
 
             info!(
                 next_epoch,

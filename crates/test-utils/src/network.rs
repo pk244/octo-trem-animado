@@ -127,6 +127,19 @@ impl TestCluster {
         start_fullnode_from_config(config).await
     }
 
+    pub fn validator_handles<'a>(&'a self) -> impl Iterator<Item = SuiNodeHandle> + 'a {
+        self.swarm
+            .validators()
+            .map(|node| node.get_node_handle().unwrap())
+    }
+
+    pub fn all_node_handles<'a>(&'a self) -> impl Iterator<Item = SuiNodeHandle> + 'a {
+        self.validator_handles()
+            .chain(std::iter::once(SuiNodeHandle::new(
+                self.fullnode_handle.sui_node.clone(),
+            )))
+    }
+
     pub fn get_validator_addresses(&self) -> Vec<AuthorityName> {
         self.swarm.validators().map(|v| v.name()).collect()
     }
@@ -278,7 +291,9 @@ pub struct TestClusterBuilder {
     fullnode_rpc_port: Option<u16>,
     enable_fullnode_events: bool,
     initial_protocol_version: ProtocolVersion,
-    supported_protocol_versions_config: ProtocolVersionsConfig,
+    validator_supported_protocol_versions_config: ProtocolVersionsConfig,
+    // Default to validator_supported_protocol_versions_config, but can be overridden.
+    fullnode_supported_protocol_versions_config: Option<ProtocolVersionsConfig>,
     db_checkpoint_config_validators: DBCheckpointConfig,
     db_checkpoint_config_fullnodes: DBCheckpointConfig,
 }
@@ -292,7 +307,8 @@ impl TestClusterBuilder {
             num_validators: None,
             enable_fullnode_events: false,
             initial_protocol_version: SupportedProtocolVersions::SYSTEM_DEFAULT.max,
-            supported_protocol_versions_config: ProtocolVersionsConfig::Default,
+            validator_supported_protocol_versions_config: ProtocolVersionsConfig::Default,
+            fullnode_supported_protocol_versions_config: None,
             db_checkpoint_config_validators: DBCheckpointConfig::default(),
             db_checkpoint_config_fullnodes: DBCheckpointConfig::default(),
         }
@@ -351,7 +367,15 @@ impl TestClusterBuilder {
     }
 
     pub fn with_supported_protocol_versions(mut self, c: SupportedProtocolVersions) -> Self {
-        self.supported_protocol_versions_config = ProtocolVersionsConfig::Global(c);
+        self.validator_supported_protocol_versions_config = ProtocolVersionsConfig::Global(c);
+        self
+    }
+
+    pub fn with_fullnode_supported_protocol_versions_config(
+        mut self,
+        c: SupportedProtocolVersions,
+    ) -> Self {
+        self.fullnode_supported_protocol_versions_config = Some(ProtocolVersionsConfig::Global(c));
         self
     }
 
@@ -364,7 +388,8 @@ impl TestClusterBuilder {
         mut self,
         func: SupportedProtocolVersionsCallback,
     ) -> Self {
-        self.supported_protocol_versions_config = ProtocolVersionsConfig::PerValidator(func);
+        self.validator_supported_protocol_versions_config =
+            ProtocolVersionsConfig::PerValidator(func);
         self
     }
 
@@ -386,7 +411,9 @@ impl TestClusterBuilder {
             .config()
             .fullnode_config_builder()
             .with_supported_protocol_versions_config(
-                self.supported_protocol_versions_config.clone(),
+                self.fullnode_supported_protocol_versions_config
+                    .clone()
+                    .unwrap_or(self.validator_supported_protocol_versions_config.clone()),
             )
             .with_db_checkpoint_config(self.db_checkpoint_config_fullnodes)
             .set_event_store(self.enable_fullnode_events)
@@ -430,7 +457,7 @@ impl TestClusterBuilder {
             .with_protocol_version(self.initial_protocol_version)
             .with_db_checkpoint_config(self.db_checkpoint_config_validators.clone())
             .with_supported_protocol_versions_config(
-                self.supported_protocol_versions_config.clone(),
+                self.validator_supported_protocol_versions_config.clone(),
             );
 
         if let Some(genesis_config) = self.genesis_config.take() {
